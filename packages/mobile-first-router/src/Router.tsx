@@ -1,7 +1,6 @@
 import * as React from 'react';
 
-import { always, compose, defaultTo } from 'ramda';
-import { Provider } from 'react-redux';
+import { always, defaultTo, path, pick } from 'ramda';
 
 import {
   Wrapper,
@@ -10,7 +9,10 @@ import {
   View
 } from '@aloompa/mobile-first-components';
 
-import withRouter from './withRouter';
+import queryStringAdapter, {
+  getQueryString
+} from './adapters/queryStringAdapter';
+
 import {
   MFNavigationConfig,
   MFNavigationRoute,
@@ -20,12 +22,44 @@ import { AnimatedModalScreen } from './AnimatedModalScreen';
 import { AnimatedScreen } from './AnimatedScreen';
 import { getWidthAndHeight } from './util/getWidthAndHeight';
 import { getTitle, getTitleFromCache } from './util/getTitle';
-import createStore from './store';
+import {
+  createActions as createReducerActions,
+  routerReducer
+} from './routerReducer';
 const { useState, useEffect } = React;
+
+const calcViewHeightReduction = ({
+  navbarHidden,
+  tabRoutes,
+  isIOS,
+  isAndroid
+}: {
+  navbarHidden: boolean;
+  tabRoutes: Array<any>;
+  isIOS: boolean;
+  isAndroid: boolean;
+}) => {
+  if (tabRoutes.length > 1) {
+    if (isIOS && navbarHidden) {
+      return 85;
+    } else if (isIOS) {
+      return 135;
+    }
+
+    if (isAndroid && navbarHidden) {
+      return 108;
+    } else if (isAndroid) {
+      return 158;
+    }
+
+    return 102;
+  } else {
+    return 50;
+  }
+};
 
 const Router = (props: any) => {
   const [routeConfigs] = useState(initializeRoutes(props.routes));
-
   const { width, height } = getWidthAndHeight(props);
 
   useEffect(() => {
@@ -40,6 +74,13 @@ const Router = (props: any) => {
   const currentRouteId = props.route.route;
   const currentRouteConfig = routeConfigs[currentRouteId];
 
+  const queryState = getQueryString(
+    path(['document', 'location', 'search'], global)
+  );
+  const { deviceType, isNative } = pick(['deviceType', 'isNative'], queryState);
+  const isIOS = isNative === 'true' && deviceType === 'ios';
+  const isAndroid = isNative == 'true' && deviceType === 'android';
+
   return (
     <Wrapper>
       {props.renderTopNav({
@@ -53,20 +94,25 @@ const Router = (props: any) => {
         activeTabIndex={props.activeTabIndex}
         setActiveTab={props.setActiveTab}
         bottomTab={!props.topTab}
-        viewHeightReduction={props.tabRoutes.length > 1 ? 102 : 50}
+        isIOS={isIOS}
+        viewHeightReduction={calcViewHeightReduction({
+          ...props,
+          isIOS,
+          isAndroid
+        })}
         tabButtons={props.tabs ? props.tabs.map((tab) => tab.button) : []}
-        tabViews={props.tabRoutes.map(() => (
-          <ContentArea>
+        tabViews={props.tabRoutes.map((_, key) => (
+          <ContentArea key={key}>
             {props.history
               .filter((route) => {
                 const routeConfig = routeConfigs[route.route];
                 return routeConfig.mode !== 'modal';
               })
-              .map((route, _index) => {
+              .map((route, key) => {
                 const routeConfig = routeConfigs[route.route];
                 const { Component } = routeConfig;
                 return (
-                  <View>
+                  <View key={key}>
                     <AnimatedScreen
                       {...{
                         ...props,
@@ -87,11 +133,11 @@ const Router = (props: any) => {
           const routeConfig = routeConfigs[route.route];
           return routeConfig.mode === 'modal';
         })
-        .map((route, _key) => {
+        .map((route, key) => {
           const routeConfig = routeConfigs[route.route];
           const { Component } = routeConfig;
           return (
-            <View>
+            <View key={key}>
               <AnimatedModalScreen
                 {...{
                   ...props,
@@ -176,27 +222,33 @@ const fillEmptyTitles = (config: MFNavigationConfig) =>
 
 const createRoutes = (config: MFNavigationConfig) => {
   const configWithTitles = fillEmptyTitles(config);
+  const { reducer, initialState } = routerReducer({
+    routeConfig: configWithTitles,
+    adapter: queryStringAdapter
+  });
 
-  return compose(withRouter)((props) =>
-    Router({
+  return (props) => {
+    const [state, dispatch] = React.useReducer(reducer, initialState);
+    const reducerActions = createReducerActions(dispatch);
+
+    return Router({
+      ...reducerActions,
+      ...state,
       ...props,
       ...{
         topNavHeight: defaultTo(50, configWithTitles.topNavHeight),
         renderTopNav,
         ...configWithTitles
       }
-    })
-  );
+    });
+  };
 };
 
 export const createStoreAndRoutes = (config: MFNavigationConfig) => {
   const Routes = createRoutes(config);
-  const store = createStore(config);
-  return (props) => (
-    <Provider store={store}>
-      <Routes {...props}>{props.children}</Routes>
-    </Provider>
-  );
+  return (props) => {
+    return <Routes {...props} />;
+  };
 };
 
 export default createStoreAndRoutes;

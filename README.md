@@ -191,7 +191,7 @@ export default App;
 
 Coming soon...
 
-For now: 
+For now:
 
 `yarn run build`
 

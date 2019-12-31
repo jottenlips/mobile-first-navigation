@@ -9,6 +9,7 @@ const TabRouter = (props: {
   tabButtons: any[];
   tabViews: any[];
   viewHeightReduction: number;
+  isIOS: boolean;
 }) => {
   const tabBar = (
     <View
@@ -19,17 +20,26 @@ const TabRouter = (props: {
         height: 52,
         [`border${props.bottomTab ? 'Top' : 'Bottom'}`]: '1px solid #BBBBBB'
       }}
+      key={'tab-bar'}
     >
-      {props.tabButtons.map((button, index) =>
-        button(props.activeTabIndex === index, () => props.setActiveTab(index))
-      )}
+      {props.tabButtons.map((button, index) => (
+        <React.Fragment key={index}>
+          {button(props.activeTabIndex === index, () =>
+            props.setActiveTab(index)
+          )}
+        </React.Fragment>
+      ))}
     </View>
   );
 
   const viewHeightReduction =
-    props.viewHeightReduction - (props.hideTabBar ? 52 : 0);
+    props.viewHeightReduction -
+    (props.hideTabBar ? (props.isIOS ? 63 : 52) : 0);
   const tabView = (
-    <View style={{ height: `Calc(100vh - ${viewHeightReduction}px` }}>
+    <View
+      style={{ height: `Calc(100vh - ${viewHeightReduction}px` }}
+      key={'tab-view'}
+    >
       {props.tabViews[props.activeTabIndex]}
     </View>
   );
